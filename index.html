@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Pattern Generator</title>
+    <style>
+        /* --- CSS 스타일 --- */
+        body { margin: 0; display: flex; height: 100vh; font-family: 'Segoe UI', sans-serif; overflow: hidden; background: #222; }
+        
+        /* 스크롤바 커스텀 */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #aaa; }
+
+        /* 좌측 패널 */
+        #sidebar {
+            width: 340px;
+            min-width: 340px;
+            background: #f8f9fa;
+            border-right: 1px solid #444;
+            display: flex;
+            flex-direction: column;
+            z-index: 10;
+        }
+
+        .sidebar-header {
+            padding: 20px 20px 10px 20px;
+            background: #fff;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .sidebar-content {
+            flex-grow: 1;
+            padding: 15px;
+            overflow-y: auto;
+            background: #f4f4f4;
+        }
+
+        .sidebar-footer {
+            padding: 15px;
+            background: #fff;
+            border-top: 1px solid #ddd;
+        }
+
+        /* 캔버스 영역 */
+        #canvas-container {
+            flex-grow: 1;
+            background: #1e1e1e; /* 더 어두운 배경 */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+        canvas { background: white; box-shadow: 0 0 40px rgba(0,0,0,0.6); }
+
+        /* UI 타이포그래피 */
+        h2 { margin: 0 0 10px 0; font-size: 1.4rem; color: #333; }
+        h3 { margin: 0 0 10px 0; font-size: 0.85rem; color: #666; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; }
+        label { font-size: 0.8rem; font-weight: 600; color: #555; display: block; margin-bottom: 3px; }
+
+        /* 버튼 그룹 */
+        .add-btn-group { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; margin-bottom: 15px; }
+        .add-btn {
+            padding: 10px; cursor: pointer; border: 1px solid #ccc; background: #fff; border-radius: 4px; font-size: 0.85rem; transition: 0.2s;
+        }
+        .add-btn:hover { background: #333; color: white; border-color: #333; }
+
+        #download-btn {
+            width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;
+        }
+        #download-btn:hover { background: #0056b3; }
+
+        /* 레이어 카드 */
+        .layer-card {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            position: relative;
+        }
+        
+        .layer-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 8px; }
+        .layer-title { font-weight: bold; font-size: 0.9rem; display: flex; align-items: center; gap: 6px; }
+        .delete-btn { color: #aaa; cursor: pointer; border: none; background: none; font-size: 1.2rem; transition: color 0.2s; }
+        .delete-btn:hover { color: #ff4757; }
+
+        /* 컨트롤 그리드 */
+        .control-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; row-gap: 12px; }
+        .full-width { grid-column: span 2; }
+
+        /* 입력 폼 스타일 */
+        input[type="range"] { width: 100%; cursor: pointer; margin: 0; }
+        input[type="color"] { width: 100%; height: 28px; border: none; padding: 0; cursor: pointer; border-radius: 3px; }
+        select { width: 100%; padding: 4px; font-size: 0.8rem; border-radius: 3px; border: 1px solid #ccc; }
+        input[type="checkbox"] { vertical-align: middle; margin-right: 5px; cursor: pointer; }
+
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <div class="sidebar-header">
+            <h2>Pattern Generator v3</h2>
+            <label>그리드 밀도 (Grid Density): <span id="density-val">60</span>px</label>
+            <input type="range" id="global-density" min="20" max="150" value="60">
+        </div>
+
+        <div class="sidebar-content">
+            <h3>Add Shapes</h3>
+            <div class="add-btn-group">
+                <button class="add-btn" onclick="addLayer('circle')">● 정원</button>
+                <button class="add-btn" onclick="addLayer('square')">■ 정육면체</button>
+                <button class="add-btn" onclick="addLayer('rect')">▬ 직육면체</button>
+            </div>
+            
+            <h3 style="margin-top:20px;">Layers Settings</h3>
+            <div id="layer-list"></div>
+        </div>
+
+        <div class="sidebar-footer">
+            <button id="download-btn">JPG 저장</button>
+        </div>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="patternCanvas"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('patternCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('canvas-container');
+        const layerListEl = document.getElementById('layer-list');
+
+        // 컬러 팔레트
+        const palette = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#D6A2E8', '#FFD93D', '#6C5CE7', '#2d3436', '#0984e3'];
+
+        // 상태 관리
+        let state = {
+            gridSize: 60,
+            layers: [] 
+        };
+
+        // 초기화
+        function init() {
+            // 기본 레이어 추가
+            addLayer('circle');
+            
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            // 밀도 조절 리스너
+            document.getElementById('global-density').addEventListener('input', (e) => {
+                state.gridSize = parseInt(e.target.value);
+                document.getElementById('density-val').innerText = state.gridSize;
+                draw();
+            });
+
+            document.getElementById('download-btn').addEventListener('click', downloadImage);
+        }
+
+        // 레이어 추가
+        function addLayer(type) {
+            const id = Date.now();
+            const newLayer = {
+                id: id,
+                type: type, // 'circle', 'square', 'rect'
+                
+                // 블렌딩
+                blendMode: 'source-over',
+                
+                // 색상
+                color: palette[Math.floor(Math.random() * palette.length)],
+                randomColor: true,
+                
+                // 크기 및 형태
+                size: 80,       // 정원, 정육면체용 (0~100%)
+                width: 80,      // 직육면체용
+                height: 40,     // 직육면체용
+                randomSize: false,
+                
+                // 회전
+                rotation: 0,    // 0 ~ 360
+                randomRotate: false
+            };
+            state.layers.push(newLayer); // 맨 위에 쌓임 (배열 끝이 캔버스 최상단)
+            renderLayerUI();
+            draw();
+        }
+
+        // 레이어 삭제
+        function removeLayer(id) {
+            state.layers = state.layers.filter(l => l.id !== id);
+            renderLayerUI();
+            draw();
+        }
+
+        // 데이터 업데이트
+        function updateLayer(id, key, value) {
+            const layer = state.layers.find(l => l.id === id);
+            if (layer) {
+                // 체크박스는 boolean 변환 필요할 수도 있지만, 호출부에서 처리함
+                layer[key] = value;
+                draw();
+            }
+        }
+
+        // UI 렌더링 (가장 복잡한 부분)
+        function renderLayerUI() {
+            layerListEl.innerHTML = '';
+            
+            // 레이어 배열을 역순으로 보여줄지 정순으로 보여줄지 결정 (여기선 정순: 아래가 먼저 그려짐)
+            state.layers.forEach((layer, index) => {
+                const card = document.createElement('div');
+                card.className = 'layer-card';
+                
+                let typeName = layer.type === 'circle' ? '정원' : layer.type === 'square' ? '정육면체(Square)' : '직육면체(Rect)';
+                
+                // 직육면체일 때만 가로/세로 슬라이더 보임
+                const isRect = layer.type === 'rect';
+
+                card.innerHTML = `
+                    <div class="layer-header">
+                        <div class="layer-title">Layer ${index + 1} : ${typeName}</div>
+                        <button class="delete-btn" onclick="removeLayer(${layer.id})">×</button>
+                    </div>
+
+                    <div class="control-grid">
+                        <div class="full-width">
+                            <label>블렌딩 모드 (Blend Mode)</label>
+                            <select onchange="updateLayer(${layer.id}, 'blendMode', this.value)">
+                                <option value="source-over" ${layer.blendMode === 'source-over' ? 'selected' : ''}>기본 (Normal)</option>
+                                <option value="multiply" ${layer.blendMode === 'multiply' ? 'selected' : ''}>곱하기 (Multiply)</option>
+                                <option value="screen" ${layer.blendMode === 'screen' ? 'selected' : ''}>스크린 (Screen)</option>
+                                <option value="overlay" ${layer.blendMode === 'overlay' ? 'selected' : ''}>오버레이 (Overlay)</option>
+                                <option value="difference" ${layer.blendMode === 'difference' ? 'selected' : ''}>차이 (Difference)</option>
+                                <option value="xor" ${layer.blendMode === 'xor' ? 'selected' : ''}>구멍뚫기 (XOR)</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label>색상</label>
+                            <input type="color" value="${layer.color}" oninput="updateLayer(${layer.id}, 'color', this.value)">
+                        </div>
+                        <div style="display:flex; align-items:end; padding-bottom:5px;">
+                            <label><input type="checkbox" ${layer.randomColor ? 'checked' : ''} onchange="updateLayer(${layer.id}, 'randomColor', this.checked)">랜덤</label>
+                        </div>
+
+                        ${!isRect ? `
+                        <div class="full-width">
+                            <label>크기 (Size)</label>
+                            <input type="range" min="10" max="150" value="${layer.size}" oninput="updateLayer(${layer.id}, 'size', parseInt(this.value))">
+                        </div>
+                        ` : `
+                        <div>
+                            <label>가로 (Width)</label>
+                            <input type="range" min="10" max="150" value="${layer.width}" oninput="updateLayer(${layer.id}, 'width', parseInt(this.value))">
+                        </div>
+                        <div>
+                            <label>세로 (Height)</label>
+                            <input type="range" min="10" max="150" value="${layer.height}" oninput="updateLayer(${layer.id}, 'height', parseInt(this.value))">
+                        </div>
+                        `}
+
+                        <div class="full-width">
+                             <label><input type="checkbox" ${layer.randomSize ? 'checked' : ''} onchange="updateLayer(${layer.id}, 'randomSize', this.checked)"> 크기 랜덤 적용</label>
+                        </div>
+
+                        <div class="full-width" style="border-top:1px dashed #eee; padding-top:10px; margin-top:5px;">
+                            <label style="display:flex; justify-content:space-between;">
+                                회전 (Rotate) 
+                                <span><input type="checkbox" ${layer.randomRotate ? 'checked' : ''} onchange="updateLayer(${layer.id}, 'randomRotate', this.checked)"> 랜덤</span>
+                            </label>
+                            <input type="range" min="0" max="360" value="${layer.rotation}" oninput="updateLayer(${layer.id}, 'rotation', parseInt(this.value))">
+                        </div>
+                    </div>
+                `;
+                layerListEl.appendChild(card);
+            });
+        }
+
+        // 캔버스 리사이즈
+        function resizeCanvas() {
+            canvas.width = container.offsetWidth;
+            canvas.height = container.offsetHeight;
+            draw();
+        }
+
+        // 그리기 (Draw Logic)
+        function draw() {
+            // 캔버스 클리어
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const gridSize = state.gridSize;
+            const cols = Math.ceil(canvas.width / gridSize);
+            const rows = Math.ceil(canvas.height / gridSize);
+
+            // 그리드 루프
+            for (let x = 0; x < cols; x++) {
+                for (let y = 0; y < rows; y++) {
+                    const cellX = x * gridSize;
+                    const cellY = y * gridSize;
+
+                    // 레이어 순회
+                    state.layers.forEach(layer => {
+                        ctx.save();
+
+                        // 1. 블렌딩 모드 적용 (레이어별)
+                        ctx.globalCompositeOperation = layer.blendMode;
+
+                        // 2. 위치 이동 (셀의 중심)
+                        ctx.translate(cellX + gridSize / 2, cellY + gridSize / 2);
+
+                        // 3. 회전 처리
+                        let angle = 0;
+                        if (layer.randomRotate) {
+                            angle = Math.random() * 2 * Math.PI; // 완전 랜덤
+                        } else {
+                            angle = layer.rotation * (Math.PI / 180); // 지정 각도
+                        }
+                        ctx.rotate(angle);
+
+                        // 4. 색상 처리
+                        let fillColor = layer.color;
+                        if (layer.randomColor) {
+                            fillColor = palette[Math.floor(Math.random() * palette.length)];
+                        }
+                        ctx.fillStyle = fillColor;
+                        
+                        // 5. 크기 처리 (랜덤 계수)
+                        let scaleFactor = 1;
+                        if (layer.randomSize) {
+                            scaleFactor = 0.4 + Math.random() * 0.8; // 0.4 ~ 1.2 배
+                        }
+
+                        // 6. 도형 그리기
+                        ctx.beginPath();
+                        ctx.globalAlpha = 0.9; // 기본 투명도
+
+                        if (layer.type === 'circle') {
+                            const r = (gridSize * (layer.size / 100) * scaleFactor) / 2;
+                            ctx.arc(0, 0, Math.max(0, r), 0, Math.PI * 2);
+                            ctx.fill();
+                        } 
+                        else if (layer.type === 'square') {
+                            const s = gridSize * (layer.size / 100) * scaleFactor;
+                            ctx.rect(-s/2, -s/2, s, s);
+                            ctx.fill();
+                        } 
+                        else if (layer.type === 'rect') {
+                            const w = gridSize * (layer.width / 100) * scaleFactor;
+                            const h = gridSize * (layer.height / 100) * scaleFactor;
+                            ctx.rect(-w/2, -h/2, w, h);
+                            ctx.fill();
+                        }
+
+                        ctx.restore();
+                    });
+                }
+            }
+        }
+
+        function downloadImage() {
+            const link = document.createElement('a');
+            link.download = `pattern_v3_${Date.now()}.jpg`;
+            link.href = canvas.toDataURL('image/jpeg', 1.0);
+            link.click();
+        }
+
+        init();
+    </script>
+</body>
+</html>
